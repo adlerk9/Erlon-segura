@@ -20,9 +20,7 @@ public class AuthService {
 
     public String login(String email, String pass) throws Exception {
         User u = repo.findByEmail(email);
-        if (u == null) return null;
-        if (!u.password.equals(pass)) return null;
-        return u.token;
+        return (u != null && u.password.equals(pass)) ? u.token : null;
     }
 
     public String recover(String email, String doc, String newPass) throws Exception {
@@ -32,5 +30,14 @@ public class AuthService {
 
     public User me(String token) throws Exception {
         return repo.findByToken(token);
+    }
+
+    public String logout(String token) throws Exception {
+        if (token == null || token.isEmpty()) return "Token inválido";
+        User u = repo.findByToken(token);
+        if (u == null) return "Token inválido";
+        u.token = null;
+        repo.update(u);
+        return "Logout realizado com sucesso";
     }
 }

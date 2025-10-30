@@ -1,5 +1,4 @@
-package com.erlon.segura.util;
-
+package com.erlon.segura;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 

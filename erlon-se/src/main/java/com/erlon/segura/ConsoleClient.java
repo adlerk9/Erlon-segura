@@ -12,7 +12,7 @@ public class ConsoleClient {
         Scanner sc = new Scanner(System.in);
         String lastToken = null;
 
-        while (true) {
+        while(true) {
             System.out.println("\n== erlon-segura CLI ==");
             System.out.println("1) Signup");
             System.out.println("2) Login");
@@ -21,9 +21,8 @@ public class ConsoleClient {
             System.out.println("5) Sair");
             System.out.print("Escolha: ");
             String opt = sc.nextLine().trim();
-
             try {
-                if ("1".equals(opt)) {
+                if("1".equals(opt)) {
                     System.out.print("name: "); String name = sc.nextLine();
                     System.out.print("email: "); String email = sc.nextLine();
                     System.out.print("document: "); String doc = sc.nextLine();
@@ -31,57 +30,37 @@ public class ConsoleClient {
                     String body = String.format("{\"name\":\"%s\",\"email\":\"%s\",\"document\":\"%s\",\"password\":\"%s\"}",
                             escapeJson(name), escapeJson(email), escapeJson(doc), escapeJson(pass));
                     String resp = post(BASE + "/signup", body, null);
-                    if (!resp.startsWith("Erro")) {
-                        lastToken = stripQuotes(resp);
-                        System.out.println("Signup realizado! Token salvo: " + lastToken);
-                    } else {
-                        System.out.println(resp);
-                    }
-                } else if ("2".equals(opt)) {
+                    lastToken = stripQuotes(resp);
+                    System.out.println("Token salvo localmente: " + lastToken);
+                } else if("2".equals(opt)) {
                     System.out.print("email: "); String email = sc.nextLine();
                     System.out.print("password: "); String pass = sc.nextLine();
-                    String body = String.format("{\"login\":\"%s\",\"password\":\"%s\"}", escapeJson(email), escapeJson(pass));
+                    String body = String.format("{\"login\":\"%s\",\"password\":\"%s\"}",
+                            escapeJson(email), escapeJson(pass));
                     String resp = post(BASE + "/login", body, null);
-                    if (!resp.startsWith("Erro")) {
+                    if(resp.equals("Credenciais inválidas")) System.out.println(resp);
+                    else {
                         lastToken = stripQuotes(resp);
                         System.out.println("Login realizado! Token salvo: " + lastToken);
-                    } else {
-                        System.out.println(resp);
                     }
-                } else if ("3".equals(opt)) {
+                } else if("3".equals(opt)) {
                     System.out.print("email: "); String email = sc.nextLine();
                     System.out.print("document: "); String doc = sc.nextLine();
                     System.out.print("new password: "); String np = sc.nextLine();
                     String body = String.format("{\"email\":\"%s\",\"document\":\"%s\",\"new_password\":\"%s\"}",
                             escapeJson(email), escapeJson(doc), escapeJson(np));
                     String resp = post(BASE + "/recuperar-senha", body, null);
-                    if (!resp.startsWith("Erro")) {
-                        lastToken = stripQuotes(resp);
-                        System.out.println("Senha alterada! Token salvo: " + lastToken);
-                    } else {
-                        System.out.println(resp);
-                    }
-                } else if ("4".equals(opt)) {
-                    String tokenToUse = lastToken;
-                    if (tokenToUse == null || tokenToUse.isEmpty()) {
-                        System.out.print("Informe token (ou pressione Enter para usar o salvo): ");
-                        String input = sc.nextLine();
-                        if (!input.trim().isEmpty()) tokenToUse = input.trim();
-                    }
-                    if (tokenToUse == null || tokenToUse.isEmpty()) {
+                    lastToken = stripQuotes(resp);
+                    System.out.println("Token atualizado: " + lastToken);
+                } else if("4".equals(opt)) {
+                    if(lastToken == null) {
                         System.out.println("Nenhum token disponível.");
                     } else {
-                        String resp = get(BASE + "/me", tokenToUse);
+                        String resp = get(BASE + "/me", lastToken);
                         System.out.println("Resposta: " + resp);
                     }
-                } else if ("5".equals(opt)) {
-                    System.out.println("Saindo...");
-                    break;
-                } else {
-                    System.out.println("Opção inválida.");
-                }
-            } catch (Exception e) {
-                System.out.println("Erro: " + e.getMessage());
+                } else if("5".equals(opt)) break;
+            } catch(Exception e) {
                 e.printStackTrace(System.out);
             }
         }
@@ -93,49 +72,45 @@ public class ConsoleClient {
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setRequestMethod("POST");
         con.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        if (token != null) con.setRequestProperty("Authorization", "SDWork " + token);
+        if(token != null) con.setRequestProperty("Authorization", "SDWork " + token);
         con.setDoOutput(true);
-        try (OutputStream os = con.getOutputStream()) {
+        try(OutputStream os = con.getOutputStream()) {
             os.write(jsonBody.getBytes(StandardCharsets.UTF_8));
         }
-        int code = con.getResponseCode();
-        InputStream is = (code >= 200 && code < 400) ? con.getInputStream() : con.getErrorStream();
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = br.readLine()) != null) sb.append(line);
-        }
-        if (code != 200) return "Erro " + code + ": " + sb.toString();
-        return sb.toString();
+        return readResponse(con);
     }
 
     private static String get(String urlStr, String token) throws IOException {
         URL url = new URL(urlStr);
         HttpURLConnection con = (HttpURLConnection) url.openConnection();
         con.setRequestMethod("GET");
-        if (token != null) con.setRequestProperty("Authorization", "SDWork " + token);
+        if(token != null) con.setRequestProperty("Authorization", "SDWork " + token);
+        return readResponse(con);
+    }
+
+    private static String readResponse(HttpURLConnection con) throws IOException {
         int code = con.getResponseCode();
         InputStream is = (code >= 200 && code < 400) ? con.getInputStream() : con.getErrorStream();
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+        if(is == null) return "HTTP " + code;
+        try(BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
             String line;
-            while ((line = br.readLine()) != null) sb.append(line);
+            while((line = br.readLine()) != null) sb.append(line);
+            return sb.toString();
         }
-        if (code != 200) return "Erro " + code + ": " + sb.toString();
-        return sb.toString();
     }
 
     private static String stripQuotes(String s) {
-        if (s == null) return null;
+        if(s == null) return null;
         s = s.trim();
-        if ((s.startsWith("\"") && s.endsWith("\"")) || (s.startsWith("'") && s.endsWith("'"))) {
-            return s.substring(1, s.length() - 1);
+        if((s.startsWith("\"") && s.endsWith("\"")) || (s.startsWith("'") && s.endsWith("'"))) {
+            return s.substring(1, s.length()-1);
         }
         return s;
     }
 
     private static String escapeJson(String s) {
-        if (s == null) return "";
-        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+        if(s == null) return "";
+        return s.replace("\\","\\\\").replace("\"","\\\"");
     }
 }
