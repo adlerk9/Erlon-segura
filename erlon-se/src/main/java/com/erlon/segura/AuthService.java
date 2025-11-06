@@ -1,62 +1,43 @@
 package com.erlon.segura;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import redis.clients.jedis.Jedis;
+import java.util.Base64;
 
 public class AuthService {
-    private final Map<String, String> users = new ConcurrentHashMap<>();
-    private final Map<String, String> tokens = new ConcurrentHashMap<>();
-    private final Jedis redis = new Jedis("localhost", 6379);
-    private final SecureRateLimiter limiter = new SecureRateLimiter();
+    UserRepository repo = new UserRepository();
 
-    public String signup(String name, String email, String document, String password) {
-        if (users.containsKey(email)) {
-            throw new RuntimeException("Usuário já existe");
-        }
-        users.put(email, password);
-        return generateToken(email);
+    public AuthService() throws Exception {}
+
+    public String signup(String name, String email, String doc, String pass) throws Exception {
+        User u = new User();
+        u.name = name;
+        u.email = email;
+        u.document = doc;
+        u.password = pass;
+        u.token = Base64.getEncoder().encodeToString((email + ":" + doc).getBytes());
+        repo.save(u);
+        return u.token;
     }
 
-    public String login(String email, String password) {
-        if (!users.containsKey(email) || !users.get(email).equals(password)) {
-            throw new RuntimeException("Credenciais inválidas");
-        }
-        return generateToken(email);
+    public String login(String email, String pass) throws Exception {
+        User u = repo.findByEmail(email);
+        return (u != null && u.password.equals(pass)) ? u.token : null;
     }
 
-    public boolean logout(String token) {
-        if (token == null || !tokens.containsKey(token)) {
-            return false;
-        }
-        tokens.remove(token);
-        return true;
+    public String recover(String email, String doc, String newPass) throws Exception {
+        repo.updatePassword(email, doc, newPass);
+        return Base64.getEncoder().encodeToString((email + ":" + doc).getBytes());
     }
 
-    public boolean isAllowed(String token, String ip) {
-        return limiter.isAllowed(ip);
+    public User me(String token) throws Exception {
+        return repo.findByToken(token);
     }
 
-    public String recover(String email, String document, String newPassword) {
-        if (!users.containsKey(email)) {
-            throw new RuntimeException("Usuário não encontrado");
-        }
-        users.put(email, newPassword);
-        return generateToken(email);
-    }
-
-    public Map<String, Object> getUserInfoFromToken(String token) {
-        if (token == null || !tokens.containsKey(token)) return null;
-        String email = tokens.get(token);
-        Map<String, Object> info = new HashMap<>();
-        info.put("email", email);
-        info.put("status", "ativo");
-        return info;
-    }
-
-    private String generateToken(String email) {
-        String token = UUID.randomUUID().toString();
-        tokens.put(token, email);
-        return token;
+    public String logout(String token) throws Exception {
+        if (token == null || token.isEmpty()) return "Token inválido";
+        User u = repo.findByToken(token);
+        if (u == null) return "Token inválido";
+        u.token = null;
+        repo.update(u);
+        return "Logout realizado com sucesso";
     }
 }

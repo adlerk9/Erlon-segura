@@ -2,62 +2,62 @@ package com.erlon.segura;
 
 import static spark.Spark.*;
 import com.google.gson.Gson;
+import com.erlon.segura.Throttle;
 
 public class AuthController {
-
     public static void start() throws Exception {
         port(4567);
-        Gson gson = new Gson();
-        AuthService service = new AuthService();
-        SecureRateLimiter limiter = new SecureRateLimiter();
+
+        var gson = new Gson();
+        var service = new AuthService();
 
         post("/api/v1/auth/signup", (req, res) -> {
-            var data = gson.fromJson(req.body(), java.util.Map.class);
-            String name = (String) data.get("name");
-            String email = (String) data.get("email");
-            String doc = (String) data.get("document");
-            String pass = (String) data.get("password");
-            return service.signup(name, email, doc, pass);
+            String ip = req.ip();
+            if (!Throttle.isAllowed(ip)) {
+                res.status(429);
+                return "Muitas tentativas — tente novamente mais tarde.";
+            }
+            var user = gson.fromJson(req.body(), User.class);
+            return service.signup(user.name, user.email, user.document, user.password);
         });
 
         post("/api/v1/auth/login", (req, res) -> {
-            var data = gson.fromJson(req.body(), java.util.Map.class);
-            String email = (String) data.get("email");
-            String pass = (String) data.get("password");
             String ip = req.ip();
-            if (!limiter.isAllowed(ip)) {
+            if (!Throttle.isAllowed(ip)) {
                 res.status(429);
-                return "Muitas tentativas. Tente novamente em instantes.";
+                return "Muitas tentativas — tente novamente mais tarde.";
             }
-            String token = service.login(email, pass);
-            if (token == null) {
-                res.status(401);
-                return "Credenciais inválidas";
-            }
-            return token;
+            var loginData = gson.fromJson(req.body(), java.util.Map.class);
+            return service.login((String) loginData.get("login"), (String) loginData.get("password"));
         });
 
         post("/api/v1/auth/recuperar-senha", (req, res) -> {
-            var data = gson.fromJson(req.body(), java.util.Map.class);
-            String email = (String) data.get("email");
-            String doc = (String) data.get("document");
-            String newPass = (String) data.get("password");
-            return service.recover(email, doc, newPass);
-        });
-
-        get("/api/v1/auth/me", (req, res) -> {
-            String token = req.headers("Authorization");
-            if (token == null || token.isEmpty()) {
-                res.status(400);
-                return "Token ausente";
+            String ip = req.ip();
+            if (!Throttle.isAllowed(ip)) {
+                res.status(429);
+                return "Muitas tentativas — tente novamente mais tarde.";
             }
-            return service.getUserInfoFromToken(token);
+            var data = gson.fromJson(req.body(), java.util.Map.class);
+            return service.recover(
+                    (String) data.get("email"),
+                    (String) data.get("document"),
+                    (String) data.get("new_password")
+            );
         });
 
         post("/api/v1/auth/logout", (req, res) -> {
             String token = req.headers("Authorization");
-            service.logout(token);
-            return "Logout realizado com sucesso.";
+            return service.logout(token);
+        });
+
+        get("/api/v1/auth/me", (req, res) -> {
+            String ip = req.ip();
+            if (!Throttle.isAllowed(ip)) {
+                res.status(429);
+                return "Muitas tentativas — tente novamente mais tarde.";
+            }
+            String token = req.headers("Authorization");
+            return service.me(token);
         });
     }
 }
